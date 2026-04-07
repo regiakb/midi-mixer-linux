@@ -1,0 +1,89 @@
+{
+  "layerA": {
+    "slots": [
+      "brave",
+      "spotify",
+      "webrtc voiceengine",
+      [
+        "pipewire alsa [dolphin-emu]",
+        "dolphin-emu"
+      ],
+      "sdl application",
+      null,
+      null,
+      "alsa_input.usb-yamaha_corporation_steinberg_ur22-00.analog-stereo"
+    ],
+    "buttonActions": [
+      "brave",
+      "flatpak run com.spotify.Client",
+      "discord",
+      "~/.config/Slippi\\ Launcher/netplay/Slippi_Online-x86_64.AppImage --exec=\"/home/regi/slippi/SSBM.iso\"",
+      "steam steam://rungameid/730",
+      null,
+      null,
+      null
+    ],
+    "bottomRow1Actions": [
+      "mute",
+      "mute",
+      "mute",
+      "mute",
+      "mute",
+      "mute",
+      "mute",
+      "mute"
+    ],
+    "bottomRow2Actions": [
+      null,
+      null,
+      "playerctl previous",
+      "playerctl next",
+      null,
+      "playerctl stop",
+      "playerctl play-pause",
+      null
+    ]
+  },
+  "layerB": {
+    "slots": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "buttonActions": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "bottomRow1Actions": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "bottomRow2Actions": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  }
+}

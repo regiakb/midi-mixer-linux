@@ -7,7 +7,9 @@
     "eslint": "eslint --ext .tsx --ext .ts src/"
   },
   "dependencies": {
-    "easymidi": "^2.1.0"
+    "@types/express": "^5.0.6",
+    "easymidi": "^2.1.0",
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.11.0",

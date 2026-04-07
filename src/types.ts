@@ -2,6 +2,7 @@ export type mediaTypeType = 'sink' | 'sink-input' | 'source';
 
 export type mediaChannelType = {
   index: string,
+  indices: string[],
   state: string,
   volume: number,
   muted: boolean,

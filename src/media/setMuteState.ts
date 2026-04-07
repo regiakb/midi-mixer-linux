@@ -1,12 +1,13 @@
 import { exec } from "../helpers/exec";
 import { mediaChannelType } from "../types";
 
-export const toggleMuteState = async (mediaChannel: mediaChannelType) => {
-
-  console.log(`Setting ${mediaChannel.name} muted state`);
-
+export const setMuteState = async (mediaChannel: mediaChannelType, muted: boolean) => {
+  const indices = mediaChannel.indices?.length ? mediaChannel.indices : [mediaChannel.index];
+  const value = muted ? 1 : 0;
   try {
-    await exec(`pactl set-${mediaChannel.type}-mute ${mediaChannel.index} toggle`);
+    await Promise.all(indices.map(idx =>
+      exec(`pactl set-${mediaChannel.type}-mute ${idx} ${value}`)
+    ));
   } catch (error) {
     console.error(error);
   }

@@ -1,31 +1,89 @@
-import { volumeEncoderValueToPercentage } from "../helpers/volume";
-import { toggleMuteState } from "../media/setMuteState";
-import { setVolume } from "../media/setVolume";
-import { nextMedia, playOrPauseMedia, previousMedia, stopMedia } from "../mediaplayer/control";
-import { mediaChannelsType } from "../types";
-import { midiInput } from "./midiConnection";
+import { exec } from '../helpers/exec';
+import { volumeEncoderValueToPercentage } from '../helpers/volume';
+import { setMuteState } from '../media/setMuteState';
+import { setVolume } from '../media/setVolume';
+import { nextMedia, playOrPauseMedia, previousMedia, stopMedia } from '../mediaplayer/control';
+import { Layer, readConfig } from '../config';
+import { mediaChannels, updateChannelMute } from '../state/mediaChannels';
+import { midiInput, midiOutput } from './midiConnection';
 
-export const listenToMidi = (mediaChannels: () => mediaChannelsType): void => {
+// Layer A: CC 1-8 (enc), CC 9 (fader), notes 0-7 (enc push), 8-15 (row1), 16-23 (row2)
+// Layer B: CC 11-18 (enc), CC 10 (fader), notes 32-39 (enc push), 40-47 (row1), 48-55 (row2)
 
+const doMute = async (channelIndex: number, layer: Layer, row1NoteBase: number) => {
+  const ch = mediaChannels(layer)[channelIndex];
+  if (!ch) return;
+  const newMuted = !ch.muted;
+  updateChannelMute(channelIndex, newMuted, layer);
+  midiOutput().send('noteon', { note: channelIndex + row1NoteBase, velocity: newMuted ? 127 : 0, channel: 10 });
+  await setMuteState(ch, newMuted);
+};
+
+const handleButton = async (channelIndex: number, layer: Layer, action: string | null, row1NoteBase: number) => {
+  if (!action) return;                // null = no action
+  if (action === 'mute') {
+    await doMute(channelIndex, layer, row1NoteBase);
+  } else {
+    exec(action).catch(() => {});
+  }
+};
+
+export const listenToMidi = (): void => {
   midiInput().on('noteon', async msg => {
-    if (mediaChannels()[msg.note - 8]) {
-      const currentChannel = mediaChannels()[msg.note - 8];
-      await toggleMuteState(currentChannel);
+    if (msg.velocity === 0) return;
+    const { layerA, layerB } = readConfig();
+
+    // Layer A — encoder push (notes 0-7)
+    if (msg.note >= 0 && msg.note <= 7) {
+      await handleButton(msg.note, 'a', layerA.buttonActions[msg.note], 8);
     }
+    // Layer A — row 1 (notes 8-15)
+    else if (msg.note >= 8 && msg.note <= 15) {
+      await handleButton(msg.note - 8, 'a', layerA.bottomRow1Actions[msg.note - 8], 8);
+    }
+    // Layer A — row 2 (notes 16-23)
+    else if (msg.note >= 16 && msg.note <= 23) {
+      await handleButton(msg.note - 16, 'a', layerA.bottomRow2Actions[msg.note - 16], 8);
+    }
+    // Layer B — encoder push (notes 32-39)
+    else if (msg.note >= 32 && msg.note <= 39) {
+      await handleButton(msg.note - 32, 'b', layerB.buttonActions[msg.note - 32], 40);
+    }
+    // Layer B — row 1 (notes 40-47)
+    else if (msg.note >= 40 && msg.note <= 47) {
+      await handleButton(msg.note - 40, 'b', layerB.bottomRow1Actions[msg.note - 40], 40);
+    }
+    // Layer B — row 2 (notes 48-55)
+    else if (msg.note >= 48 && msg.note <= 55) {
+      await handleButton(msg.note - 48, 'b', layerB.bottomRow2Actions[msg.note - 48], 40);
+    }
+    // Media transport (Layer A: notes 18-22)
+    else if (msg.note === 21) await stopMedia();
+    else if (msg.note === 22) await playOrPauseMedia();
+    else if (msg.note === 19) await nextMedia();
+    else if (msg.note === 18) await previousMedia();
   });
 
   midiInput().on('cc', async msg => {
-    if (mediaChannels()[msg.controller - 1]) {
-      const currentChannel = mediaChannels()[msg.controller - 1];
-      const newVolume = volumeEncoderValueToPercentage(msg.value);
-      await setVolume(currentChannel, newVolume);
-    }
-  });
+    const val = volumeEncoderValueToPercentage(msg.value);
 
-  midiInput().on('noteon', async msg => {
-    if (msg.note === 21) await stopMedia();
-    if (msg.note === 22) await playOrPauseMedia();
-    if (msg.note === 19) await nextMedia();
-    if (msg.note === 18) await previousMedia();
+    // Layer A fader (CC 9)
+    if (msg.controller === 9) {
+      await exec(`pactl set-sink-volume @DEFAULT_SINK@ ${val}%`);
+    }
+    // Layer B fader (CC 10)
+    else if (msg.controller === 10) {
+      await exec(`pactl set-sink-volume @DEFAULT_SINK@ ${val}%`);
+    }
+    // Layer A knobs (CC 1-8)
+    else if (msg.controller >= 1 && msg.controller <= 8) {
+      const ch = mediaChannels('a')[msg.controller - 1];
+      if (ch) await setVolume(ch, val);
+    }
+    // Layer B knobs (CC 11-18)
+    else if (msg.controller >= 11 && msg.controller <= 18) {
+      const ch = mediaChannels('b')[msg.controller - 11];
+      if (ch) await setVolume(ch, val);
+    }
   });
 };

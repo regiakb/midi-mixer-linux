@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Midi Mixer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d1a;
+      --bg2: #13132a;
+      --bg3: #1a1a30;
+      --border: #2a2a4a;
+      --border2: #3a3a6a;
+      --accent: #4466ff;
+      --accent2: #a0a8ff;
+      --text: #e0e0f0;
+      --text2: #8888cc;
+      --muted: #555577;
+      --red: #c0392b;
+      --green: #2ecc71;
+      --gap: 14px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 24px;
+      background: #0a0a18;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .header-title { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+    .header-title h1 { font-size: 1.1rem; font-weight: 700; color: var(--accent2); letter-spacing: 0.04em; }
+    .header-title span { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; }
+
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .status-pill.connected { border-color: #1a4a2a; color: var(--green); }
+    .status-pill.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    .btn { padding: 7px 16px; border-radius: 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; letter-spacing: 0.03em; transition: background 0.15s, border-color 0.15s; }
+    .btn-ghost { background: transparent; border-color: var(--border2); color: var(--text2); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); background: #1a1a3a; }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover { background: #5577ff; }
+
+    .file-btn { position: relative; overflow: hidden; }
+    .file-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+
+    .toast { font-size: 0.78rem; padding: 6px 12px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .toast.ok { color: var(--green); background: #0a2a1a; border: 1px solid #1a4a2a; }
+    .toast.error { color: #ff6666; background: #2a0a0a; border: 1px solid #4a1a1a; }
+
+    /* ── LOGS PANEL ──────────────────────────────────────── */
+    .logs-panel {
+      background: #080810;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .logs-panel pre {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.7rem;
+      color: #7a7aaa;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* ── LAYER TABS ──────────────────────────────────────── */
+    .layer-tabs {
+      display: flex;
+      gap: 0;
+      padding: 12px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .layer-tab {
+      padding: 8px 28px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      color: var(--muted);
+      background: transparent;
+      transition: color 0.15s, background 0.15s;
+      margin-bottom: -1px;
+    }
+    .layer-tab:hover { color: var(--text2); background: var(--bg2); }
+    .layer-tab.active {
+      color: var(--accent2);
+      background: var(--bg2);
+      border-color: var(--border);
+      border-bottom-color: var(--bg2);
+    }
+
+    /* ── MAIN LAYOUT ─────────────────────────────────────── */
+    .main-layout {
+      display: flex;
+      align-items: stretch;
+      gap: var(--gap);
+      padding: 20px 24px;
+      height: 50vh;
+      min-height: 320px;
+    }
+
+    /* ── GRID ────────────────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: var(--gap);
+      flex: 1;
+      min-width: 0;
+    }
+    @media (max-width: 1200px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 640px)  { .grid { grid-template-columns: repeat(2, 1fr); } }
+
+    /* ── CARD ────────────────────────────────────────────── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transition: border-color 0.2s;
+      min-width: 0;
+      width: 100%;
+      overflow-y: auto;
+    }
+    .card:hover { border-color: var(--border2); }
+    .card.running { border-color: #1e3a5a; }
+    .card.muted { border-color: #3a1a1a; }
+
+    .card-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+
+    /* ── KNOB ────────────────────────────────────────────── */
+    .knob-wrap { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
+    .knob-wrap svg { width: 84px; height: 84px; }
+    .knob-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .knob-vol { font-size: 1rem; font-weight: 700; color: var(--text); line-height: 1; }
+    .knob-pct { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── STATUS ROW ──────────────────────────────────────── */
+    .card-status { display: flex; align-items: center; gap: 6px; width: 100%; }
+    .mute-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border2); flex-shrink: 0; }
+    .mute-dot.on { background: var(--red); box-shadow: 0 0 5px var(--red); }
+    .app-name {
+      font-size: 0.7rem; font-weight: 500; color: var(--text2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+    }
+    .app-name.active { color: #66aaff; }
+    .app-name.muted-label { color: var(--red); }
+
+    /* ── DIVIDER ─────────────────────────────────────────── */
+    .divider { width: 100%; border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+
+    /* ── FIELD ───────────────────────────────────────────── */
+    .field { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+    .field-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-top: 2px; }
+
+    select, input[type="text"] {
+      width: 100%;
+      background: var(--bg3);
+      color: #c8c8e8;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 9px;
+      font-size: 0.75rem;
+      outline: none;
+      line-height: 1.4;
+    }
+    select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23555577'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 22px;
+    }
+    select:focus, input[type="text"]:focus { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: #333355; }
+    optgroup { color: var(--muted); font-size: 0.68rem; font-style: normal; font-weight: 700; letter-spacing: 0.06em; }
+    option { color: #c8c8e8; font-size: 0.75rem; background: #1a1a30; padding: 4px; }
+
+    /* ── TAGS ────────────────────────────────────────────── */
+    .tags-list { display: flex; flex-wrap: wrap; gap: 5px; min-height: 24px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      border-radius: 6px; padding: 3px 8px 3px 9px;
+      font-size: 0.7rem; font-weight: 500;
+      max-width: 100%; overflow: hidden;
+    }
+    .tag.type-sink-input { background: #1a2a40; border: 1px solid #2a4a6a; color: #66aaff; }
+    .tag.type-source     { background: #1a2a1a; border: 1px solid #2a5a2a; color: #66cc88; }
+    .tag.type-sink       { background: #2a1a3a; border: 1px solid #4a2a6a; color: #aa88ff; }
+    .tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tag-x { cursor: pointer; color: #444466; font-size: 0.72rem; flex-shrink: 0; line-height: 1; margin-left: 1px; }
+    .tag-x:hover { color: var(--red); }
+    .tags-empty { font-size: 0.68rem; color: #2a2a4a; font-style: italic; line-height: 2; }
+
+    .add-row { display: flex; gap: 5px; }
+    .add-row select { flex: 1; }
+    .add-btn {
+      flex-shrink: 0; background: var(--bg3); color: var(--text2);
+      border: 1px solid var(--border2); border-radius: 8px;
+      padding: 5px 11px; font-size: 0.82rem; cursor: pointer; font-weight: 600;
+    }
+    .add-btn:hover { border-color: var(--accent); color: var(--accent2); background: #1e1e3a; }
+
+    /* ── BUTTON CONFIG ───────────────────────────────────── */
+    .btn-config { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+
+    /* ── FADER PANEL ─────────────────────────────────────── */
+    .fader-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 10px;
+      flex-shrink: 0;
+      width: 64px;
+      align-self: stretch;
+    }
+    .fader-label { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+    .fader-vol { font-size: 0.82rem; font-weight: 700; color: var(--text); }
+    .fader-pct { font-size: 0.54rem; color: var(--muted); margin-top: -4px; }
+
+    .fader-track-wrap {
+      flex: 1;
+      min-height: 80px;
+      width: 40px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .fader-track {
+      width: 6px;
+      height: 100%;
+      background: var(--bg3);
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .fader-fill {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: var(--accent);
+      border-radius: 3px;
+      height: 0%;
+      transition: height 0.08s;
+    }
+    .fader-input {
+      position: absolute;
+      inset: 0;
+      -webkit-appearance: none;
+      appearance: none;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      cursor: grab;
+      padding: 0;
+      margin: 0;
+    }
+    .fader-input:active { cursor: grabbing; }
+    .fader-input::-webkit-slider-runnable-track { background: transparent; }
+    .fader-input::-moz-range-track { background: transparent; }
+    .fader-input::-moz-range-progress { background: transparent; }
+    .fader-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 30px; height: 12px; border-radius: 4px;
+      background: #d8d8ee; border: 1px solid #aab;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      cursor: grab;
+    }
+    .fader-input::-moz-range-thumb {
+      width: 30px; height: 12px; border-radius: 4px;
+      background: #d8d8ee; border: 1px solid #aab;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      cursor: grab;
+    }
+    .fader-input:active::-webkit-slider-thumb { cursor: grabbing; background: #fff; }
+    .fader-input:active::-moz-range-thumb { cursor: grabbing; background: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-title">
+      <h1>Midi Mixer</h1>
+      <span>X-Touch Mini · Behringer</span>
+    </div>
+
+    <div class="status-pill" id="status-pill">
+      <div class="dot"></div>
+      <span id="status-text">Checking...</span>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-ghost" onclick="toggleLogs()">Logs</button>
+      <label class="btn btn-ghost file-btn" title="Import configuration">
+        Import
+        <input type="file" accept=".json" onchange="importConfig(this)">
+      </label>
+      <button class="btn btn-ghost" onclick="exportConfig()">Export</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+      <span class="toast" id="toast"></span>
+    </div>
+  </header>
+
+  <!-- LOGS PANEL -->
+  <div class="logs-panel" id="logs-panel" style="display:none">
+    <pre id="logs-content">Loading logs...</pre>
+  </div>
+
+  <!-- LAYER TABS -->
+  <div class="layer-tabs">
+    <button class="layer-tab active" id="tab-a" onclick="switchLayer('a')">Layer A</button>
+    <button class="layer-tab" id="tab-b" onclick="switchLayer('b')">Layer B</button>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-layout">
+    <div class="grid" id="grid"></div>
+
+    <!-- FADER MASTER -->
+    <div class="fader-panel" id="fader-panel">
+      <div class="fader-label">Main</div>
+      <div class="fader-track-wrap">
+        <div class="fader-track"><div class="fader-fill" id="fader-fill"></div></div>
+        <input type="range" class="fader-input" id="fader-input" min="0" max="100" value="0"
+               oninput="onFaderInput(this.value)"
+               onchange="setMasterVolume(this.value)">
+      </div>
+      <div class="fader-vol" id="fader-vol">—</div>
+      <div class="fader-pct">%</div>
+    </div>
+  </div>
+
+  <script>
+    const KNOB_LABELS = ['Ch 1','Ch 2','Ch 3','Ch 4','Ch 5','Ch 6','Ch 7','Ch 8'];
+
+    // Per-layer state
+    const slotKeywords = {
+      a: Array.from({length: 8}, () => []),
+      b: Array.from({length: 8}, () => []),
+    };
+    const slotModified = {
+      a: Array(8).fill(false),
+      b: Array(8).fill(false),
+    };
+
+    let activeLayer = 'a';
+    let state = null;
+    let logsVisible = false;
+
+    // ── LAYER SWITCH ──────────────────────────────────────
+    function switchLayer(layer) {
+      if (layer === activeLayer) return;
+      activeLayer = layer;
+      document.getElementById('tab-a').className = `layer-tab${layer === 'a' ? ' active' : ''}`;
+      document.getElementById('tab-b').className = `layer-tab${layer === 'b' ? ' active' : ''}`;
+      // Force rebuild for new layer
+      if (state) buildGrid(state);
+    }
+
+    function layerData(data) {
+      return activeLayer === 'a' ? data.layerA : data.layerB;
+    }
+
+    // ── KNOB SVG ──────────────────────────────────────────
+    function knobSvg(volume, muted) {
+      const r = 32, cx = 42, cy = 42;
+      const circ = 2 * Math.PI * r;
+      const arc = circ * 0.75;
+      const fill = arc * (Math.max(0, Math.min(100, volume)) / 100);
+      const color = muted ? '#c0392b' : '#4466ff';
+      return `<svg viewBox="0 0 84 84">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1e1e3a" stroke-width="7"
+          stroke-dasharray="${arc} ${circ - arc}" stroke-linecap="round"
+          transform="rotate(135 ${cx} ${cy})"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="7"
+          stroke-dasharray="${fill} ${circ - fill}" stroke-linecap="round"
+          transform="rotate(135 ${cx} ${cy})"/>
+      </svg>`;
+    }
+
+    // ── TAGS ──────────────────────────────────────────────
+    function renderTags(i, runningApps) {
+      const tagsEl = document.getElementById(`tags-${i}`);
+      const addSelEl = document.getElementById(`add-sel-${i}`);
+      if (!tagsEl) return;
+      const kws = slotKeywords[activeLayer][i];
+      const ra = runningApps || state?.runningApps || [];
+
+      tagsEl.innerHTML = kws.length
+        ? kws.map(kw => {
+            const entry = ra.find(a => a.keyword === kw);
+            const typeClass = entry ? `type-${entry.type}` : 'type-sink-input';
+            const label = entry ? entry.name : kw;
+            return `<span class="tag ${typeClass}"><span title="${escAttr(kw)}">${esc(label)}</span><span class="tag-x" onclick="removeKw(${i},'${escAttr(kw)}')">✕</span></span>`;
+          }).join('')
+        : `<span class="tags-empty">No assignments</span>`;
+
+      if (addSelEl && !addSelEl.value) {
+        const cur = slotKeywords[activeLayer][i];
+        const apps    = ra.filter(a => a.type === 'sink-input' && !cur.includes(a.keyword));
+        const mics    = ra.filter(a => a.type === 'source'     && !cur.includes(a.keyword));
+        const outputs = ra.filter(a => a.type === 'sink'       && !cur.includes(a.keyword));
+        let html = `<option value="">— Add...</option>`;
+        if (apps.length)    html += `<optgroup label="📱 Applications">${apps.map(a    => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+        if (mics.length)    html += `<optgroup label="🎙 Inputs (Mic)">${mics.map(a    => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+        if (outputs.length) html += `<optgroup label="🔊 Outputs">${outputs.map(a      => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+        addSelEl.innerHTML = html;
+      }
+    }
+
+    function removeKw(i, kw) {
+      slotKeywords[activeLayer][i] = slotKeywords[activeLayer][i].filter(k => k !== kw);
+      slotModified[activeLayer][i] = true;
+      renderTags(i);
+    }
+
+    function addKw(i) {
+      const sel = document.getElementById(`add-sel-${i}`);
+      const kw = sel.value;
+      if (!kw || slotKeywords[activeLayer][i].includes(kw)) return;
+      slotKeywords[activeLayer][i].push(kw);
+      slotModified[activeLayer][i] = true;
+      sel.value = '';
+      renderTags(i);
+    }
+
+    // ── BUTTON CONFIG ─────────────────────────────────────
+    // null                = no action (default)
+    // "mute"              = toggle mute on the channel
+    // "playerctl ..."     = media control (stored as shell cmd)
+    // other string        = arbitrary shell command
+    const MEDIA_ACTIONS = [
+      { value: 'playerctl play-pause', label: '⏯ Play / Pause' },
+      { value: 'playerctl stop',       label: '⏹ Stop' },
+      { value: 'playerctl next',       label: '⏭ Next' },
+      { value: 'playerctl previous',   label: '⏮ Previous' },
+    ];
+
+    function btnConfigHtml(idPrefix, action) {
+      const isMute  = action === 'mute';
+      const isMedia = MEDIA_ACTIONS.some(m => m.value === action);
+      const isCmd   = action && !isMute && !isMedia;
+
+      const mediaOpts = MEDIA_ACTIONS.map(m =>
+        `<option value="${escAttr(m.value)}" ${action === m.value ? 'selected' : ''}>${esc(m.label)}</option>`
+      ).join('');
+
+      return `
+        <select id="${idPrefix}-type" onchange="onBtnTypeChange('${idPrefix}')">
+          <option value="none"  ${!isMute && !isMedia && !isCmd ? 'selected' : ''}>— No action —</option>
+          <option value="mute"  ${isMute  ? 'selected' : ''}>🔇 Mute channel (toggle)</option>
+          <optgroup label="Media controls">${mediaOpts}</optgroup>
+          <option value="cmd"   ${isCmd   ? 'selected' : ''}>⌨ Command / Script</option>
+        </select>
+        <input type="text" id="${idPrefix}-cmd" value="${escAttr(isCmd ? action : '')}"
+               placeholder="e.g. brave, ~/.scripts/foo.sh ..."
+               style="display:${isCmd ? 'block' : 'none'}">`;
+    }
+
+    function onBtnTypeChange(idPrefix) {
+      const sel = document.getElementById(`${idPrefix}-type`);
+      const inp = document.getElementById(`${idPrefix}-cmd`);
+      inp.style.display = sel.value === 'cmd' ? 'block' : 'none';
+    }
+
+    function getBtnAction(idPrefix) {
+      const sel = document.getElementById(`${idPrefix}-type`);
+      if (!sel || sel.value === 'none') return null;
+      if (sel.value === 'mute') return 'mute';
+      if (sel.value === 'cmd') {
+        const val = document.getElementById(`${idPrefix}-cmd`)?.value.trim();
+        return val || null;
+      }
+      // media action or any other select value = stored as-is (shell command)
+      return sel.value;
+    }
+
+    // ── BUILD GRID ────────────────────────────────────────
+    function initSlots(data) {
+      const ld = layerData(data);
+      ld.channels.forEach((ch, i) => {
+        if (slotModified[activeLayer][i]) return;
+        const kw = ld.slots[i];
+        slotKeywords[activeLayer][i] = Array.isArray(kw) ? [...kw] : (kw ? [kw] : []);
+      });
+    }
+
+    function buildGrid(data) {
+      initSlots(data);
+      const ld = layerData(data);
+      const grid = document.getElementById('grid');
+      grid.innerHTML = ld.channels.map((ch, i) => {
+        const muted = ch.muted;
+        const label = ch.running
+          ? (muted ? `${ch.name} (muted)` : ch.name)
+          : (slotKeywords[activeLayer][i].length ? `${slotKeywords[activeLayer][i].join(' + ')} (inactive)` : '—');
+
+        return `<div class="card ${ch.running ? 'running' : ''} ${muted ? 'muted' : ''}" id="card-${i}">
+          <div class="card-label">${KNOB_LABELS[i]}</div>
+
+          <div class="knob-wrap" id="knob-${i}">
+            ${knobSvg(ch.volume, muted)}
+            <div class="knob-center">
+              <span class="knob-vol" id="kvol-${i}">${ch.running ? ch.volume : '—'}</span>
+              <span class="knob-pct">${ch.running ? '%' : ''}</span>
+            </div>
+          </div>
+
+          <div class="card-status">
+            <div class="mute-dot ${muted ? 'on' : ''}" id="dot-${i}"></div>
+            <div class="app-name ${ch.running ? (muted ? 'muted-label' : 'active') : ''}" id="name-${i}">${esc(label)}</div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="field">
+            <div class="field-label">Applications</div>
+            <div class="tags-list" id="tags-${i}"></div>
+            <div class="add-row">
+              <select id="add-sel-${i}"></select>
+              <button class="add-btn" onclick="addKw(${i})">+</button>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="field">
+            <div class="field-label">Encoder button (push)</div>
+            <div class="btn-config" id="enc-cfg-${i}">
+              ${btnConfigHtml(`enc-${i}`, ch.buttonAction)}
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Button row 1</div>
+            <div class="btn-config" id="bot1-cfg-${i}">
+              ${btnConfigHtml(`bot1-${i}`, ch.bottomRow1Action)}
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Button row 2</div>
+            <div class="btn-config" id="bot2-cfg-${i}">
+              ${btnConfigHtml(`bot2-${i}`, ch.bottomRow2Action)}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+      ld.channels.forEach((_, i) => renderTags(i, data.runningApps));
+    }
+
+    function updateGrid(data) {
+      if (!state) { buildGrid(data); state = data; return; }
+
+      const ld = layerData(data);
+      ld.channels.forEach((ch, i) => {
+        const card = document.getElementById(`card-${i}`);
+        if (!card) return;
+        card.className = `card ${ch.running ? 'running' : ''} ${ch.muted ? 'muted' : ''}`;
+
+        document.getElementById(`knob-${i}`).innerHTML = knobSvg(ch.volume, ch.muted) +
+          `<div class="knob-center">
+            <span class="knob-vol">${ch.running ? ch.volume : '—'}</span>
+            <span class="knob-pct">${ch.running ? '%' : ''}</span>
+          </div>`;
+
+        document.getElementById(`dot-${i}`).className = `mute-dot ${ch.muted ? 'on' : ''}`;
+        const nameEl = document.getElementById(`name-${i}`);
+        nameEl.className = `app-name ${ch.running ? (ch.muted ? 'muted-label' : 'active') : ''}`;
+        const label = ch.running
+          ? (ch.muted ? `${ch.name} (muted)` : ch.name)
+          : (slotKeywords[activeLayer][i].length ? `${slotKeywords[activeLayer][i].join(' + ')} (inactive)` : '—');
+        nameEl.textContent = label;
+
+        const addSel = document.getElementById(`add-sel-${i}`);
+        if (addSel && !addSel.value) {
+          const cur = slotKeywords[activeLayer][i];
+          const ra = data.runningApps || [];
+          const apps    = ra.filter(a => a.type === 'sink-input' && !cur.includes(a.keyword));
+          const mics    = ra.filter(a => a.type === 'source'     && !cur.includes(a.keyword));
+          const outputs = ra.filter(a => a.type === 'sink'       && !cur.includes(a.keyword));
+          let html = `<option value="">— Add...</option>`;
+          if (apps.length)    html += `<optgroup label="📱 Applications">${apps.map(a    => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+          if (mics.length)    html += `<optgroup label="🎙 Inputs (Mic)">${mics.map(a    => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+          if (outputs.length) html += `<optgroup label="🔊 Outputs">${outputs.map(a      => `<option value="${escAttr(a.keyword)}">${esc(a.name)}</option>`).join('')}</optgroup>`;
+          addSel.innerHTML = html;
+        }
+      });
+
+      state = data;
+    }
+
+    // ── FADER ─────────────────────────────────────────────
+    function updateFader(vol) {
+      const input = document.getElementById('fader-input');
+      const fill = document.getElementById('fader-fill');
+      const volEl = document.getElementById('fader-vol');
+      if (input) input.value = vol;
+      if (fill) fill.style.height = vol + '%';
+      if (volEl) volEl.textContent = vol;
+    }
+
+    function onFaderInput(val) {
+      document.getElementById('fader-vol').textContent = val;
+      document.getElementById('fader-fill').style.height = val + '%';
+    }
+
+    async function setMasterVolume(val) {
+      await fetch('/api/volume/master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ volume: Number(val) }),
+      });
+    }
+
+    // ── STATUS ────────────────────────────────────────────
+    function updateStatus(connected) {
+      const pill = document.getElementById('status-pill');
+      const text = document.getElementById('status-text');
+      pill.className = `status-pill ${connected ? 'connected' : ''}`;
+      text.textContent = connected ? 'X-Touch Mini connected' : 'No MIDI device';
+    }
+
+    // ── LOGS ──────────────────────────────────────────────
+    async function toggleLogs() {
+      const panel = document.getElementById('logs-panel');
+      logsVisible = !logsVisible;
+      panel.style.display = logsVisible ? 'block' : 'none';
+      if (logsVisible) await refreshLogs();
+    }
+
+    async function refreshLogs() {
+      const el = document.getElementById('logs-content');
+      try {
+        const res = await fetch('/api/logs');
+        const data = await res.json();
+        el.textContent = data.logs;
+        el.scrollTop = el.scrollHeight;
+      } catch { el.textContent = 'Failed to fetch logs'; }
+    }
+
+    // ── IMPORT / EXPORT ───────────────────────────────────
+    function exportConfig() {
+      window.location.href = '/api/config/export';
+    }
+
+    async function importConfig(input) {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const res = await fetch('/api/config/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(json),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Configuration imported', false);
+          slotModified.a.fill(false);
+          slotModified.b.fill(false);
+          state = null;
+          await fetchState();
+        } else {
+          showToast(data.error || 'Import failed', true);
+        }
+      } catch { showToast('Invalid JSON', true); }
+      input.value = '';
+    }
+
+    // ── SAVE ──────────────────────────────────────────────
+    function collectLayer(layer) {
+      const slots = Array.from({length: 8}, (_, i) => {
+        const kws = slotKeywords[layer][i];
+        if (kws.length === 0) return null;
+        if (kws.length === 1) return kws[0];
+        return kws;
+      });
+
+      // Only collect button actions if they are currently rendered (i.e. active layer)
+      if (layer === activeLayer) {
+        return {
+          slots,
+          buttonActions:    Array.from({length: 8}, (_, i) => getBtnAction(`enc-${i}`)),
+          bottomRow1Actions: Array.from({length: 8}, (_, i) => getBtnAction(`bot1-${i}`)),
+          bottomRow2Actions: Array.from({length: 8}, (_, i) => getBtnAction(`bot2-${i}`)),
+        };
+      } else {
+        // Use last known server state for the inactive layer's button actions
+        const ld = layer === 'a' ? state?.layerA : state?.layerB;
+        return {
+          slots,
+          buttonActions:    ld?.buttonActions    ?? Array(8).fill(null),
+          bottomRow1Actions: ld?.bottomRow1Actions ?? Array(8).fill(null),
+          bottomRow2Actions: ld?.bottomRow2Actions ?? Array(8).fill(null),
+        };
+      }
+    }
+
+    async function saveConfig() {
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ layerA: collectLayer('a'), layerB: collectLayer('b') }),
+        });
+        const data = await res.json();
+        showToast(data.ok ? 'Configuration saved' : 'Failed to save', !data.ok);
+        if (data.ok) {
+          slotModified[activeLayer].fill(false);
+          fetchState();
+        }
+      } catch { showToast('Connection error', true); }
+    }
+
+    // ── FETCH ─────────────────────────────────────────────
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        updateStatus(data.midiConnected);
+        updateFader(data.masterVolume ?? 0);
+        updateGrid(data);
+      } catch(e) { console.error(e); }
+    }
+
+    // ── TOAST ─────────────────────────────────────────────
+    function showToast(msg, error = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast show ${error ? 'error' : 'ok'}`;
+      setTimeout(() => t.className = 'toast', 2800);
+    }
+
+    // ── UTILS ─────────────────────────────────────────────
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+    // ── INIT ──────────────────────────────────────────────
+    fetchState();
+    setInterval(fetchState, 2000);
+    setInterval(() => { if (logsVisible) refreshLogs(); }, 5000);
+  </script>
+</body>
+</html>

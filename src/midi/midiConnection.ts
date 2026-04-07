@@ -22,6 +22,8 @@ const connectToMidi = () => {
 
 export const midiNrOfChannels = () => NR_OF_CHANNELS;
 
+export const isMidiConnected = (): boolean => !!midiInputConnection;
+
 export const midiInput = (): easymidi.Input => {
   if (!midiInputConnection) {
     connectToMidi();
