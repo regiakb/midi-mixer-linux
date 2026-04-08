@@ -1,11 +1,13 @@
 import express from 'express';
 import * as path from 'path';
 import { exec } from './helpers/exec';
-import { readConfig, writeConfig, CONFIG_PATH_EXPORT, LayerConfig } from './config';
+import { readConfig, writeConfig, CONFIG_PATH_EXPORT, LayerConfig, Layer } from './config';
+import { setMuteState } from './media/setMuteState';
 import { mediaChannels } from './state/mediaChannels';
 import { getChannelName, setChannelName, clearChannelName } from './state/channelNames';
 import { isMidiConnected, reconnectMidi } from './midi/midiConnection';
 import { listenToMidi } from './midi/listenToMidi';
+import { getActiveLayer } from './state/activeLayer';
 
 const PORT = 3000;
 
@@ -141,6 +143,7 @@ export const startServer = () => {
       },
       runningApps,
       masterVolume,
+      activeLayer: getActiveLayer(),
       midiConnected: isMidiConnected(),
     });
   });
@@ -164,6 +167,38 @@ export const startServer = () => {
       });
     });
     writeConfig({ layerA: newLayerA, layerB: newLayerB });
+    res.json({ ok: true });
+  });
+
+  // Toggle mute for a channel
+  app.post('/api/channel/:layer/:index/mute', async (req, res) => {
+    const layer = req.params.layer as Layer;
+    const index = parseInt(req.params.index);
+    if (!['a', 'b'].includes(layer) || isNaN(index) || index < 0 || index > 7) {
+      return res.status(400).json({ error: 'Invalid layer or index' });
+    }
+    const ch = mediaChannels(layer)[index];
+    if (!ch) return res.status(404).json({ error: 'Channel not active' });
+    await setMuteState(ch, !ch.muted);
+    res.json({ ok: true, muted: !ch.muted });
+  });
+
+  // Update a single slot keyword
+  app.post('/api/channel/:layer/:index/slot', (req, res) => {
+    const layer = req.params.layer as Layer;
+    const index = parseInt(req.params.index);
+    if (!['a', 'b'].includes(layer) || isNaN(index) || index < 0 || index > 7) {
+      return res.status(400).json({ error: 'Invalid layer or index' });
+    }
+    const config = readConfig();
+    const layerCfg = layer === 'a' ? config.layerA : config.layerB;
+    const { keyword } = req.body; // string | null
+    const old = layerCfg.slots[index];
+    if (JSON.stringify(old) !== JSON.stringify(keyword ?? null)) {
+      clearChannelName(`${layer}-${index}`);
+    }
+    layerCfg.slots[index] = keyword ?? null;
+    writeConfig(config);
     res.json({ ok: true });
   });
 

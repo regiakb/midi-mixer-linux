@@ -1,7 +1,8 @@
-import { midiOutput } from "../midi/midiConnection";
+import { isMidiConnected, midiOutput } from "../midi/midiConnection";
 import { mediaChannelsType, mediaPlayerStatusType } from "../types";
 
 export const updateMediaPlayer = (playerStatus: mediaPlayerStatusType | null, mediaChannels: () => mediaChannelsType) => {
+  if (!isMidiConnected()) return;
   const playingChannel = mediaChannels().filter(mediaChannel => {
     return mediaChannel && mediaChannel.type === 'sink-input' && mediaChannel.state === 'RUNNING' && mediaChannel.name !== 'Google Chrome';
   });
