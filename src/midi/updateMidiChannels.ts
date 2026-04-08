@@ -17,33 +17,39 @@ const LAYER_OFFSETS = {
   b: { cc: 10, row1Note: 40, row2Note: 48 },
 };
 
-type ChannelState = { mode: number; value: number; muted: boolean };
+// Only deduplicate mute LED button state
+// mode+value are always sent every tick so the device stays in sync
+// even after a silent layer switch (no MIDI event is emitted by the device)
+type ChannelState = { muted: boolean };
 const prevState: Record<string, ChannelState> = {};
+
+// no-op kept for import compatibility with listenToMidi.ts
+export const scheduleLayerModeResend = (_layer: Layer): void => {};
 
 export const updateMidiChannels = (mediaChannels: (layer: Layer) => mediaChannelsType, layer: Layer) => {
   const offsets = LAYER_OFFSETS[layer];
+
   for (let i = 0; i < midiNrOfChannels(); i++) {
     const ch = mediaChannels(layer)[i];
     const ccNum = i + 1 + offsets.cc;
-    const key = `${layer}-${i}`;
+    const key   = `${layer}-${i}`;
 
     const mode  = ch ? RING_MODE_FAN : RING_MODE_OFF;
     const value = ch ? volumePercentageToEncoder(ch.volume) : 0;
     const muted = ch ? ch.muted : false;
 
-    const prev = prevState[key];
+    // Always resend mode + value every tick.
+    // The device silently resets LED state on every layer switch (no MIDI event),
+    // so there is no other way to stay consistent.
+    midiOutput().send('cc', { controller: ccNum, value: mode,  channel: RING_MODE_CHANNEL });
+    midiOutput().send('cc', { controller: ccNum, value,         channel: RING_VALUE_CHANNEL });
 
-    if (!prev || prev.mode !== mode || prev.value !== value || prev.muted !== muted) {
-      if (!prev || prev.mode !== mode) {
-        midiOutput().send('cc', { controller: ccNum, value: mode, channel: RING_MODE_CHANNEL });
-      }
-      if (!prev || prev.value !== value) {
-        midiOutput().send('cc', { controller: ccNum, value, channel: RING_VALUE_CHANNEL });
-      }
-      if (!prev || prev.muted !== muted) {
-        midiOutput().send('noteon', { note: i + offsets.row1Note, velocity: muted ? 127 : 0, channel: BUTTON_CHANNEL });
-      }
-      prevState[key] = { mode, value, muted };
+    // Mute button LED: only send on change (it does not reset on layer switch)
+    const prev = prevState[key];
+    if (!prev || prev.muted !== muted) {
+      midiOutput().send('noteon', { note: i + offsets.row1Note, velocity: muted ? 127 : 0, channel: BUTTON_CHANNEL });
     }
+
+    prevState[key] = { muted };
   }
 };
