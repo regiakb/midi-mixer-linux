@@ -125,6 +125,33 @@ Configuration is stored in `config.json` at the project root. It is managed from
 
 ---
 
+## GNOME Shell Extension
+
+A companion extension is available to control the mixer directly from the GNOME status bar — no browser needed.
+
+**[midi-mixer-panel-gnome](https://github.com/regiakb/midi-mixer-panel-gnome)**
+
+![Panel](https://raw.githubusercontent.com/regiakb/midi-mixer-panel-gnome/main/screenshots/panel.png)
+
+### What it provides
+
+- Per-channel cards with app name, volume bar, mute button, and slot assignment
+- Layer A / Layer B display that follows the active layer on the controller
+- Master fader slider
+- Right-click context menu with connection status and Reconnect button
+
+### Installation
+
+```bash
+git clone https://github.com/regiakb/midi-mixer-panel-gnome
+cp -r midi-mixer-panel-gnome ~/.local/share/gnome-shell/extensions/midi-mixer-panel@regi
+gnome-extensions enable midi-mixer-panel@regi
+```
+
+Requires GNOME Shell 45 or later and midi-mixer-linux running on port 3000.
+
+---
+
 ## X-Touch Mini layout (Standard mode)
 
 ```
