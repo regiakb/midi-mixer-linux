@@ -31,3 +31,9 @@ export const setChannelName = (key: string, name: string): void => {
   cache[key] = name;
   scheduleSave();
 };
+
+export const clearChannelName = (key: string): void => {
+  if (!(key in cache)) return;
+  delete cache[key];
+  scheduleSave();
+};

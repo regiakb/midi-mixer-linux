@@ -3,7 +3,7 @@ import * as path from 'path';
 import { exec } from './helpers/exec';
 import { readConfig, writeConfig, CONFIG_PATH_EXPORT, LayerConfig } from './config';
 import { mediaChannels } from './state/mediaChannels';
-import { getChannelName, setChannelName } from './state/channelNames';
+import { getChannelName, setChannelName, clearChannelName } from './state/channelNames';
 import { isMidiConnected, reconnectMidi } from './midi/midiConnection';
 import { listenToMidi } from './midi/listenToMidi';
 
@@ -150,7 +150,20 @@ export const startServer = () => {
     if (!layerA || !layerB) {
       return res.status(400).json({ error: 'layerA and layerB are required' });
     }
-    writeConfig({ layerA: normalizeLayerBody(layerA), layerB: normalizeLayerBody(layerB) });
+    const oldConfig = readConfig();
+    const newLayerA = normalizeLayerBody(layerA);
+    const newLayerB = normalizeLayerBody(layerB);
+    // Invalidate cached name for any slot whose keyword assignment changed
+    (['a', 'b'] as const).forEach(lk => {
+      const oldSlots = lk === 'a' ? oldConfig.layerA.slots : oldConfig.layerB.slots;
+      const newSlots = lk === 'a' ? newLayerA.slots : newLayerB.slots;
+      oldSlots.forEach((oldKw, i) => {
+        if (JSON.stringify(oldKw) !== JSON.stringify(newSlots[i])) {
+          clearChannelName(`${lk}-${i}`);
+        }
+      });
+    });
+    writeConfig({ layerA: newLayerA, layerB: newLayerB });
     res.json({ ok: true });
   });
 
