@@ -546,7 +546,7 @@
         const muted = ch.muted;
         const label = ch.running
           ? (muted ? `${ch.name} (muted)` : ch.name)
-          : (slotKeywords[activeLayer][i].length ? `${slotKeywords[activeLayer][i].join(' + ')} (inactive)` : '—');
+          : (ch.name ? `${ch.name} (inactive)` : slotKeywords[activeLayer][i].length ? `${slotKeywords[activeLayer][i].join(' + ')} (inactive)` : '—');
 
         return `<div class="card ${ch.running ? 'running' : ''} ${muted ? 'muted' : ''}" id="card-${i}">
           <div class="card-label">${KNOB_LABELS[i]}</div>
