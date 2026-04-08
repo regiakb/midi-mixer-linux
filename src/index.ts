@@ -1,4 +1,4 @@
-import { fetchMediaChannels } from './media/fetchMediaChannels';
+import { fetchPactlData, resolveMediaChannels } from './media/fetchMediaChannels';
 import { fetchMediaPlayerStatus } from './mediaplayer/fetchMediaPlayerStatus';
 import { updateMediaPlayer } from './mediaplayer/updateMediaPlayer';
 import { listenToMidi } from './midi/listenToMidi';
@@ -15,10 +15,9 @@ import { startServer } from './server';
   }
 
   setInterval(async () => {
-    const [chA, chB] = await Promise.all([
-      fetchMediaChannels('a'),
-      fetchMediaChannels('b'),
-    ]);
+    const pactl = await fetchPactlData();
+    const chA = resolveMediaChannels(pactl, 'a');
+    const chB = resolveMediaChannels(pactl, 'b');
     setMediaChannels(chA, 'a');
     setMediaChannels(chB, 'b');
 

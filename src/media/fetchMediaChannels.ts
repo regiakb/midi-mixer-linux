@@ -7,6 +7,12 @@ interface ParsedEntry extends mediaChannelType {
   matchKeys: string; // lowercase concat of all matchable fields
 }
 
+export interface PactlData {
+  sinkInputs: ParsedEntry[];
+  sources: ParsedEntry[];
+  sinks: ParsedEntry[];
+}
+
 const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
   const prefix = type === 'sink' ? 'Sink' : type === 'source' ? 'Source' : 'Sink Input';
   const blocks = raw.split(/^(?=Sink Input #|Sink #|Source #)/m).filter(b => b.trim());
@@ -24,16 +30,20 @@ const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
     const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
     const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
 
-    // For Flatpak apps, app_id (e.g. "com.spotify.Client") is more meaningful
-    // than application.name which may reflect the generic runtime instead.
+    // Prefer portal app_id (Flatpak) or process binary over application.name,
+    // which may reflect a generic runtime (e.g. "Chromium", "SDL Application").
     const appId = appIdMatch?.[1];
+    const binary = binaryMatch?.[1];
     const displayName = appId
       ? (() => { const p = appId.split('.'); const s = p[p.length - 2] ?? p[0]; return s.charAt(0).toUpperCase() + s.slice(1); })()
-      : (appNameMatch?.[1] || descMatch?.[1]?.trim() || '');
+      : binary
+        ? binary.charAt(0).toUpperCase() + binary.slice(1)
+        : (appNameMatch?.[1] || descMatch?.[1]?.trim() || '');
     if (!volumeMatch || !muteMatch || !displayName) return [];
 
     const matchKeys = [
       displayName,
+      appNameMatch?.[1], // original application.name (e.g. "WEBRTC Voice Engine") for keyword matching
       nameMatch?.[1],
       binaryMatch?.[1],
       appIdMatch?.[1],
@@ -53,18 +63,22 @@ const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
   });
 };
 
-export const fetchMediaChannels = async (layer: Layer = 'a'): Promise<mediaChannelsType> => {
+export const fetchPactlData = async (): Promise<PactlData> => {
   const [{ stdout: rawSinkInputs }, { stdout: rawSources }, { stdout: rawSinks }] = await Promise.all([
     exec('pactl list sink-inputs'),
     exec('pactl list sources'),
     exec('pactl list sinks'),
   ]);
+  return {
+    sinkInputs: parsePactlBlocks(rawSinkInputs, 'sink-input'),
+    sources: parsePactlBlocks(rawSources, 'source').filter(s => !s.entryName.includes('.monitor')),
+    sinks: parsePactlBlocks(rawSinks, 'sink'),
+  };
+};
 
-  const toChannel = ({ entryName: _, matchKeys: __, ...rest }: ParsedEntry): mediaChannelType => ({ ...rest, indices: [rest.index] });
-  const sinkInputs = parsePactlBlocks(rawSinkInputs, 'sink-input');
-  const sources = parsePactlBlocks(rawSources, 'source').filter(s => !s.entryName.includes('.monitor'));
-  const sinks = parsePactlBlocks(rawSinks, 'sink');
+const toChannel = ({ entryName: _, matchKeys: __, ...rest }: ParsedEntry): mediaChannelType => ({ ...rest, indices: [rest.index] });
 
+export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChannelsType => {
   const config = readConfig();
   const SLOT_APPS = (layer === 'a' ? config.layerA : config.layerB).slots;
 
@@ -76,7 +90,7 @@ export const fetchMediaChannels = async (layer: Layer = 'a'): Promise<mediaChann
       entries.filter(s => keywords.some(kw => s.matchKeys.includes(kw)));
 
     // Try sink-inputs first (app audio), then sources (mics), then sinks (outputs)
-    const sinkInputMatches = matches(sinkInputs);
+    const sinkInputMatches = matches(data.sinkInputs);
     if (sinkInputMatches.length) {
       const first = toChannel(sinkInputMatches[0]);
       return {
@@ -87,10 +101,10 @@ export const fetchMediaChannels = async (layer: Layer = 'a'): Promise<mediaChann
       };
     }
 
-    const sourceMatch = matches(sources)[0];
+    const sourceMatch = matches(data.sources)[0];
     if (sourceMatch) return toChannel(sourceMatch);
 
-    const sinkMatch = matches(sinks)[0];
+    const sinkMatch = matches(data.sinks)[0];
     if (sinkMatch) return toChannel(sinkMatch);
 
     return undefined as unknown as mediaChannelType;

@@ -22,12 +22,22 @@ const parseRunningApps = async (): Promise<AppEntry[]> => {
   const inputBlocks = rawInputs.split(/^(?=Sink Input #)/m).filter(b => b.trim());
   for (const block of inputBlocks) {
     const appNameMatch = block.match(/application\.name = "([^"]+)"/m);
+    const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
+    const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
     const volumeMatch = block.match(/Volume:.*?(\d+)%/m);
     const muteMatch = block.match(/Mute:\s+(yes|no)/m);
     if (!appNameMatch) continue;
-    const name = appNameMatch[1];
-    if (!apps.find(a => a.keyword === name.toLowerCase())) {
-      apps.push({ name, keyword: name.toLowerCase(), volume: Number(volumeMatch?.[1] ?? 0), muted: muteMatch?.[1] === 'yes', type: 'sink-input' });
+    const rawName = appNameMatch[1];
+    const appId = appIdMatch?.[1];
+    const binary = binaryMatch?.[1];
+    const name = appId
+      ? (() => { const p = appId.split('.'); const s = p[p.length - 2] ?? p[0]; return s.charAt(0).toUpperCase() + s.slice(1); })()
+      : binary
+        ? binary.charAt(0).toUpperCase() + binary.slice(1)
+        : rawName;
+    const keyword = rawName.toLowerCase();
+    if (!apps.find(a => a.keyword === keyword)) {
+      apps.push({ name, keyword, volume: Number(volumeMatch?.[1] ?? 0), muted: muteMatch?.[1] === 'yes', type: 'sink-input' });
     }
   }
 
@@ -66,6 +76,8 @@ const getMasterVolume = async (): Promise<number> => {
   }
 };
 
+const lastKnownNames: Record<string, string> = {};
+
 const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningApps: AppEntry[]) => {
   const channels = mediaChannels(layerKey);
   return layerCfg.slots.map((keyword, i) => {
@@ -74,14 +86,17 @@ const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningA
       ? runningApps.find(a => keywords.some(kw => a.keyword.includes(kw) || kw.includes(a.keyword)))
       : null;
     const live = channels[i];
-    const displayName = Array.isArray(keyword) ? keyword.join(' + ') : keyword;
+    const resolvedName = live?.name ?? running?.name ?? null;
+    const cacheKey = `${layerKey}-${i}`;
+    if (resolvedName) lastKnownNames[cacheKey] = resolvedName;
+    const fallbackName = Array.isArray(keyword) ? keyword.join(' + ') : keyword;
     return {
       index: i,
       keyword,
       buttonAction: layerCfg.buttonActions[i] ?? null,
       bottomRow1Action: layerCfg.bottomRow1Actions[i] ?? null,
       bottomRow2Action: layerCfg.bottomRow2Actions[i] ?? null,
-      name: live?.name ?? running?.name ?? displayName ?? null,
+      name: resolvedName ?? lastKnownNames[cacheKey] ?? fallbackName ?? null,
       volume: live?.volume ?? running?.volume ?? 0,
       muted: live?.muted ?? running?.muted ?? false,
       running: !!live || !!running,
