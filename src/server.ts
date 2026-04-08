@@ -95,7 +95,7 @@ const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningA
       buttonAction: layerCfg.buttonActions[i] ?? null,
       bottomRow1Action: layerCfg.bottomRow1Actions[i] ?? null,
       bottomRow2Action: layerCfg.bottomRow2Actions[i] ?? null,
-      name: resolvedName ?? getChannelName(cacheKey) ?? fallbackName ?? null,
+      name: keywords.length ? (resolvedName ?? getChannelName(cacheKey) ?? fallbackName ?? null) : null,
       volume: live?.volume ?? running?.volume ?? 0,
       muted: live?.muted ?? running?.muted ?? false,
       running: !!live || !!running,
