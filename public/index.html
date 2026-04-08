@@ -439,11 +439,12 @@
       const kws = slotKeywords[activeLayer][i];
       const ra = runningApps || state?.runningApps || [];
 
+      const cachedChannelName = state ? layerData(state)?.channels?.[i]?.name : null;
       tagsEl.innerHTML = kws.length
         ? kws.map(kw => {
             const entry = ra.find(a => a.keyword === kw);
             const typeClass = entry ? `type-${entry.type}` : 'type-sink-input';
-            const label = entry ? entry.name : kw;
+            const label = entry ? entry.name : (cachedChannelName || kw);
             return `<span class="tag ${typeClass}"><span title="${escAttr(kw)}">${esc(label)}</span><span class="tag-x" onclick="removeKw(${i},'${escAttr(kw)}')">✕</span></span>`;
           }).join('')
         : `<span class="tags-empty">No assignments</span>`;
