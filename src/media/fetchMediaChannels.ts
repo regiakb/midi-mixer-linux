@@ -24,7 +24,12 @@ const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
     const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
     const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
 
-    const displayName = appNameMatch?.[1] || descMatch?.[1]?.trim() || '';
+    // For Flatpak apps, app_id (e.g. "com.spotify.Client") is more meaningful
+    // than application.name which may reflect the generic runtime instead.
+    const appId = appIdMatch?.[1];
+    const displayName = appId
+      ? (() => { const p = appId.split('.'); const s = p[p.length - 2] ?? p[0]; return s.charAt(0).toUpperCase() + s.slice(1); })()
+      : (appNameMatch?.[1] || descMatch?.[1]?.trim() || '');
     if (!volumeMatch || !muteMatch || !displayName) return [];
 
     const matchKeys = [
