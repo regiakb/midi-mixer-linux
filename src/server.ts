@@ -3,6 +3,7 @@ import * as path from 'path';
 import { exec } from './helpers/exec';
 import { readConfig, writeConfig, CONFIG_PATH_EXPORT, LayerConfig } from './config';
 import { mediaChannels } from './state/mediaChannels';
+import { getChannelName, setChannelName } from './state/channelNames';
 import { isMidiConnected, reconnectMidi } from './midi/midiConnection';
 import { listenToMidi } from './midi/listenToMidi';
 
@@ -76,8 +77,6 @@ const getMasterVolume = async (): Promise<number> => {
   }
 };
 
-const lastKnownNames: Record<string, string> = {};
-
 const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningApps: AppEntry[]) => {
   const channels = mediaChannels(layerKey);
   return layerCfg.slots.map((keyword, i) => {
@@ -88,7 +87,7 @@ const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningA
     const live = channels[i];
     const resolvedName = live?.name ?? running?.name ?? null;
     const cacheKey = `${layerKey}-${i}`;
-    if (resolvedName) lastKnownNames[cacheKey] = resolvedName;
+    if (resolvedName) setChannelName(cacheKey, resolvedName);
     const fallbackName = Array.isArray(keyword) ? keyword.join(' + ') : keyword;
     return {
       index: i,
@@ -96,7 +95,7 @@ const buildLayerChannels = (layerCfg: LayerConfig, layerKey: 'a' | 'b', runningA
       buttonAction: layerCfg.buttonActions[i] ?? null,
       bottomRow1Action: layerCfg.bottomRow1Actions[i] ?? null,
       bottomRow2Action: layerCfg.bottomRow2Actions[i] ?? null,
-      name: resolvedName ?? lastKnownNames[cacheKey] ?? fallbackName ?? null,
+      name: resolvedName ?? getChannelName(cacheKey) ?? fallbackName ?? null,
       volume: live?.volume ?? running?.volume ?? 0,
       muted: live?.muted ?? running?.muted ?? false,
       running: !!live || !!running,
