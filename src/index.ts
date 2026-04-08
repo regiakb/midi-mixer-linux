@@ -8,7 +8,11 @@ import { startServer } from './server';
 
 (() => {
   startServer();
-  listenToMidi();
+  try {
+    listenToMidi();
+  } catch (e) {
+    console.error('Could not connect to MIDI device at startup:', e);
+  }
 
   setInterval(async () => {
     const [chA, chB] = await Promise.all([

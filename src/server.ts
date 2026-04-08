@@ -3,7 +3,8 @@ import * as path from 'path';
 import { exec } from './helpers/exec';
 import { readConfig, writeConfig, CONFIG_PATH_EXPORT, LayerConfig } from './config';
 import { mediaChannels } from './state/mediaChannels';
-import { isMidiConnected } from './midi/midiConnection';
+import { isMidiConnected, reconnectMidi } from './midi/midiConnection';
+import { listenToMidi } from './midi/listenToMidi';
 
 const PORT = 3000;
 
@@ -159,6 +160,16 @@ export const startServer = () => {
     }
     await exec(`pactl set-sink-volume @DEFAULT_SINK@ ${volume}%`);
     res.json({ ok: true });
+  });
+
+  app.post('/api/midi/reconnect', (_req, res) => {
+    try {
+      reconnectMidi();
+      listenToMidi();
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.get('/api/logs', async (_req, res) => {

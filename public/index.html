@@ -57,6 +57,9 @@
     .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
     .status-pill.connected { border-color: #1a4a2a; color: var(--green); }
     .status-pill.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .btn-reconnect { background: transparent; border-color: #3a2a1a; color: #cc8844; }
+    .btn-reconnect:hover { border-color: #cc8844; color: #ffaa66; background: #2a1a0a; }
+    .btn-reconnect:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .header-actions { display: flex; gap: 8px; align-items: center; }
 
@@ -339,6 +342,7 @@
     </div>
 
     <div class="header-actions">
+      <button class="btn btn-reconnect" id="btn-reconnect" onclick="reconnectMidi()">Reconnect</button>
       <button class="btn btn-ghost" onclick="toggleLogs()">Logs</button>
       <label class="btn btn-ghost file-btn" title="Import configuration">
         Import
@@ -669,6 +673,26 @@
       const text = document.getElementById('status-text');
       pill.className = `status-pill ${connected ? 'connected' : ''}`;
       text.textContent = connected ? 'X-Touch Mini connected' : 'No MIDI device';
+    }
+
+    async function reconnectMidi() {
+      const btn = document.getElementById('btn-reconnect');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      try {
+        const res = await fetch('/api/midi/reconnect', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('MIDI reconnected', 'ok');
+        } else {
+          showToast(data.error || 'Reconnect failed', 'error');
+        }
+      } catch {
+        showToast('Reconnect failed', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Reconnect';
+      }
     }
 
     // ── LOGS ──────────────────────────────────────────────
