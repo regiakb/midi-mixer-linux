@@ -89,7 +89,12 @@ export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChanne
     const matches = (entries: ParsedEntry[]) =>
       entries.filter(s => keywords.some(kw => s.matchKeys.includes(kw)));
 
-    // Try sink-inputs first (app audio), then sources (mics), then sinks (outputs)
+    // Try sink-inputs first (app audio), then sources (mics), then sinks (outputs).
+    // Only fall through to sources/sinks if the keyword looks like a device name
+    // (contains a dot or known prefix), not a generic app keyword — this prevents
+    // a WebRTC capture source from matching an app slot like "webrtc voiceengine".
+    const isDeviceKeyword = keywords.some(kw => kw.includes('.') || kw.startsWith('alsa_'));
+
     const sinkInputMatches = matches(data.sinkInputs);
     if (sinkInputMatches.length) {
       const first = toChannel(sinkInputMatches[0]);
@@ -100,6 +105,8 @@ export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChanne
         muted: sinkInputMatches.every(m => m.muted),
       };
     }
+
+    if (!isDeviceKeyword) return undefined as unknown as mediaChannelType;
 
     const sourceMatch = matches(data.sources)[0];
     if (sourceMatch) return toChannel(sourceMatch);
