@@ -14,11 +14,24 @@ const PORT = 3000;
 type AppEntry = { name: string; keyword: string; volume: number; muted: boolean; type: 'sink-input' | 'source' | 'sink' };
 
 const parseRunningApps = async (): Promise<AppEntry[]> => {
-  const [{ stdout: rawInputs }, { stdout: rawSources }, { stdout: rawSinks }] = await Promise.all([
+  const [{ stdout: rawInputs }, { stdout: rawSources }, { stdout: rawSinks }, { stdout: rawClients }] = await Promise.all([
     exec('pactl list sink-inputs'),
     exec('pactl list sources'),
     exec('pactl list sinks'),
+    exec('pactl list clients'),
   ]);
+
+  // Build a map of PipeWire client object.id → {name, binary} for fallback lookup
+  const clientMap = new Map<string, { name: string; binary?: string }>();
+  const clientBlocks = rawClients.split(/^(?=Client #)/m).filter(b => b.trim());
+  for (const cb of clientBlocks) {
+    const objIdMatch = cb.match(/object\.id = "([^"]+)"/m);
+    const nameMatch = cb.match(/application\.name = "([^"]+)"/m);
+    const binaryMatch = cb.match(/application\.process\.binary = "([^"]+)"/m);
+    if (objIdMatch && nameMatch) {
+      clientMap.set(objIdMatch[1], { name: nameMatch[1], binary: binaryMatch?.[1] });
+    }
+  }
 
   const apps: AppEntry[] = [];
 
@@ -27,12 +40,17 @@ const parseRunningApps = async (): Promise<AppEntry[]> => {
     const appNameMatch = block.match(/application\.name = "([^"]+)"/m);
     const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
     const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
+    const clientIdMatch = block.match(/client\.id = "([^"]+)"/m);
     const volumeMatch = block.match(/Volume:.*?(\d+)%/m);
     const muteMatch = block.match(/Mute:\s+(yes|no)/m);
-    if (!appNameMatch) continue;
-    const rawName = appNameMatch[1];
+
+    // Fallback to client map when application.name is not in the sink-input block (e.g. Spotify via PipeWire)
+    const clientEntry = clientIdMatch ? clientMap.get(clientIdMatch[1]) : undefined;
+    if (!appNameMatch && !clientEntry) continue;
+
+    const rawName = appNameMatch?.[1] ?? clientEntry!.name;
     const appId = appIdMatch?.[1];
-    const binary = binaryMatch?.[1];
+    const binary = binaryMatch?.[1] ?? clientEntry?.binary;
     const name = appId
       ? (() => { const p = appId.split('.'); const s = p[p.length - 2] ?? p[0]; return s.charAt(0).toUpperCase() + s.slice(1); })()
       : binary
