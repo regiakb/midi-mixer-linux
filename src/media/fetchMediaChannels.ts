@@ -13,7 +13,11 @@ export interface PactlData {
   sinks: ParsedEntry[];
 }
 
-const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
+const parsePactlBlocks = (
+  raw: string,
+  type: mediaTypeType,
+  clientMap: Map<string, { name: string; binary?: string }> = new Map(),
+): ParsedEntry[] => {
   const prefix = type === 'sink' ? 'Sink' : type === 'source' ? 'Source' : 'Sink Input';
   const blocks = raw.split(/^(?=Sink Input #|Sink #|Source #)/m).filter(b => b.trim());
 
@@ -29,23 +33,28 @@ const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
     const appNameMatch = block.match(/application\.name = "([^"]+)"/m);
     const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
     const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
+    const clientIdMatch = block.match(/client\.id = "([^"]+)"/m);
+
+    // Fallback to client map when application.name is absent (e.g. Spotify via PipeWire)
+    const clientEntry = clientIdMatch ? clientMap.get(clientIdMatch[1]) : undefined;
 
     // Prefer portal app_id (Flatpak) or process binary over application.name,
     // which may reflect a generic runtime (e.g. "Chromium", "SDL Application").
     const appId = appIdMatch?.[1];
-    const binary = binaryMatch?.[1];
+    const binary = binaryMatch?.[1] ?? clientEntry?.binary;
+    const rawAppName = appNameMatch?.[1] ?? clientEntry?.name;
     const displayName = appId
       ? (() => { const p = appId.split('.'); const s = p[p.length - 2] ?? p[0]; return s.charAt(0).toUpperCase() + s.slice(1); })()
       : binary
         ? binary.charAt(0).toUpperCase() + binary.slice(1)
-        : (appNameMatch?.[1] || descMatch?.[1]?.trim() || '');
+        : (rawAppName || descMatch?.[1]?.trim() || '');
     if (!volumeMatch || !muteMatch || !displayName) return [];
 
     const matchKeys = [
       displayName,
-      appNameMatch?.[1], // original application.name (e.g. "WEBRTC Voice Engine") for keyword matching
+      rawAppName, // original application.name (e.g. "WEBRTC Voice Engine") for keyword matching
       nameMatch?.[1],
-      binaryMatch?.[1],
+      binary,
       appIdMatch?.[1],
     ].filter(Boolean).join(' ').toLowerCase();
 
@@ -64,13 +73,24 @@ const parsePactlBlocks = (raw: string, type: mediaTypeType): ParsedEntry[] => {
 };
 
 export const fetchPactlData = async (): Promise<PactlData> => {
-  const [{ stdout: rawSinkInputs }, { stdout: rawSources }, { stdout: rawSinks }] = await Promise.all([
+  const [{ stdout: rawSinkInputs }, { stdout: rawSources }, { stdout: rawSinks }, { stdout: rawClients }] = await Promise.all([
     exec('pactl list sink-inputs'),
     exec('pactl list sources'),
     exec('pactl list sinks'),
+    exec('pactl list clients'),
   ]);
+
+  // Build client map for sink-inputs missing application.name (e.g. Spotify via PipeWire)
+  const clientMap = new Map<string, { name: string; binary?: string }>();
+  for (const cb of rawClients.split(/^(?=Client #)/m).filter(b => b.trim())) {
+    const objId = cb.match(/object\.id = "([^"]+)"/m)?.[1];
+    const name = cb.match(/application\.name = "([^"]+)"/m)?.[1];
+    const binary = cb.match(/application\.process\.binary = "([^"]+)"/m)?.[1];
+    if (objId && name) clientMap.set(objId, { name, binary });
+  }
+
   return {
-    sinkInputs: parsePactlBlocks(rawSinkInputs, 'sink-input'),
+    sinkInputs: parsePactlBlocks(rawSinkInputs, 'sink-input', clientMap),
     sources: parsePactlBlocks(rawSources, 'source').filter(s => !s.entryName.includes('.monitor')),
     sinks: parsePactlBlocks(rawSinks, 'sink'),
   };
