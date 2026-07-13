@@ -1,4 +1,5 @@
 import { fetchPactlData, resolveMediaChannels } from './media/fetchMediaChannels';
+import { routeSpotifyToVirtualSink } from './media/routeSpotifyToVirtualSink';
 import { fetchMediaPlayerStatus } from './mediaplayer/fetchMediaPlayerStatus';
 import { updateMediaPlayer } from './mediaplayer/updateMediaPlayer';
 import { listenToMidi } from './midi/listenToMidi';
@@ -26,6 +27,7 @@ const tryInitMidi = () => {
   tryInitMidi();
 
   setInterval(async () => {
+    await routeSpotifyToVirtualSink();
     const pactl = await fetchPactlData();
     const chA = resolveMediaChannels(pactl, 'a');
     const chB = resolveMediaChannels(pactl, 'b');
