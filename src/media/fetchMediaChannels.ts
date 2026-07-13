@@ -106,6 +106,15 @@ export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChanne
     if (!keyword) return undefined as unknown as mediaChannelType;
     const keywords = Array.isArray(keyword) ? keyword : [keyword];
 
+    // "sink:<name>" forces matching against a specific PipeWire sink instead of
+    // the app's sink-input — used for apps (e.g. Spotify) routed through a
+    // dedicated virtual sink so their volume survives app-side resets.
+    const sinkOnlyKeywords = keywords.filter(kw => kw.startsWith('sink:')).map(kw => kw.slice('sink:'.length));
+    if (sinkOnlyKeywords.length) {
+      const sinkMatch = data.sinks.find(s => sinkOnlyKeywords.some(kw => s.matchKeys.includes(kw)));
+      return sinkMatch ? toChannel(sinkMatch) : undefined as unknown as mediaChannelType;
+    }
+
     const matches = (entries: ParsedEntry[]) =>
       entries.filter(s => keywords.some(kw => s.matchKeys.includes(kw)));
 

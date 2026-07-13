@@ -1,21 +1,24 @@
 {
   "layerA": {
     "slots": [
-      "brave",
-      "spotify",
+      [
+        "brave",
+        "firefox"
+      ],
+      "sink:spotify_sink",
       "webrtc voiceengine",
       [
         "pipewire alsa [dolphin-emu]",
         "dolphin-emu"
       ],
       "sdl application",
-      null,
-      null,
+      "audacious",
+      "doom: the dark ages",
       "alsa_input.usb-yamaha_corporation_steinberg_ur22-00.analog-stereo"
     ],
     "buttonActions": [
       "brave",
-      "flatpak run com.spotify.Client",
+      "spotify",
       "discord",
       "~/.config/Slippi\\ Launcher/netplay/Slippi_Online-x86_64.AppImage --exec=\"/home/regi/slippi/SSBM.iso\"",
       "steam steam://rungameid/730",
