@@ -116,6 +116,22 @@ Configuration is stored in `config.json` at the project root. It is managed from
 - `null` — empty slot
 - `"spotify"` — matches any application whose name contains "spotify"
 - `["app1", "app2"]` — matches multiple apps; volume is averaged across all matches
+- `"sink:<name>"` — controls a PipeWire sink directly instead of an app stream (see Spotify below)
+
+### Spotify volume
+
+Spotify resets its own stream volume to 100% on every track change. To keep the
+knob volume, route Spotify through a dedicated virtual sink and control that
+sink instead:
+
+```bash
+mkdir -p ~/.config/pipewire/pipewire.conf.d
+cp assets/pipewire/spotify-sink.conf ~/.config/pipewire/pipewire.conf.d/
+systemctl --user restart pipewire
+```
+
+Then use `"sink:spotify_sink"` as the slot value. The controller moves
+Spotify's stream to `spotify_sink` automatically on every poll tick.
 
 **Button action values:**
 - `null` — no action

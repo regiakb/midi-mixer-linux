@@ -20,8 +20,14 @@ export const routeSpotifyToVirtualSink = async () => {
     for (const block of blocks) {
       const idxMatch = block.match(/^Sink Input #(\d+)/);
       const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
+      const appNameMatch = block.match(/application\.name = "([^"]+)"/m);
       const nodeNameMatch = block.match(/node\.name = "([^"]+)"/m);
-      if (!idxMatch || binaryMatch?.[1] !== 'spotify' || nodeNameMatch?.[1] === `${TARGET_SINK}_playback`) continue;
+      // The Flatpak build streams via PipeWire natively and exposes no
+      // application.process.binary, so also accept node.name/application.name.
+      const isSpotify = binaryMatch?.[1] === 'spotify'
+        || nodeNameMatch?.[1] === 'spotify'
+        || appNameMatch?.[1]?.toLowerCase() === 'spotify';
+      if (!idxMatch || !isSpotify || nodeNameMatch?.[1] === `${TARGET_SINK}_playback`) continue;
 
       const sinkLine = block.match(/^\s+Sink:\s+(\d+)/m);
       const targetId = sinks.split('\n').find(line => line.includes(TARGET_SINK))?.split('\t')[0];

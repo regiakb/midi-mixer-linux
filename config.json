@@ -11,14 +11,14 @@
         "pipewire alsa [dolphin-emu]",
         "dolphin-emu"
       ],
-      "sdl application",
+      "cs2",
       "audacious",
-      "doom: the dark ages",
+      null,
       "alsa_input.usb-yamaha_corporation_steinberg_ur22-00.analog-stereo"
     ],
     "buttonActions": [
       "brave",
-      "spotify",
+      "flatpak run com.spotify.Client",
       "discord",
       "~/.config/Slippi\\ Launcher/netplay/Slippi_Online-x86_64.AppImage --exec=\"/home/regi/slippi/SSBM.iso\"",
       "steam steam://rungameid/730",
