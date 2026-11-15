@@ -5,12 +5,9 @@
         "brave",
         "firefox"
       ],
-      "sink:spotify_sink",
+      "stream:spotify_sink_playback",
       "webrtc voiceengine",
-      [
-        "pipewire alsa [dolphin-emu]",
-        "dolphin-emu"
-      ],
+      "pipewire alsa [dolphin-emu]",
       "cs2",
       "audacious",
       null,

@@ -4,6 +4,8 @@ import { readConfig, Layer } from '../config';
 
 interface ParsedEntry extends mediaChannelType {
   entryName: string;
+  nodeName: string;  // PipeWire node.name (used by "stream:<name>" slots)
+  streamName: string; // device.description / media.name, shown for "stream:" slots
   matchKeys: string; // lowercase concat of all matchable fields
 }
 
@@ -34,6 +36,9 @@ const parsePactlBlocks = (
     const binaryMatch = block.match(/application\.process\.binary = "([^"]+)"/m);
     const appIdMatch = block.match(/pipewire\.access\.portal\.app_id = "([^"]+)"/m);
     const clientIdMatch = block.match(/client\.id = "([^"]+)"/m);
+    const nodeNameMatch = block.match(/node\.name = "([^"]+)"/m);
+    const mediaNameMatch = block.match(/media\.name = "([^"]+)"/m);
+    const deviceDescMatch = block.match(/device\.description = "([^"]+)"/m);
 
     // Fallback to client map when application.name is absent (e.g. Spotify via PipeWire)
     const clientEntry = clientIdMatch ? clientMap.get(clientIdMatch[1]) : undefined;
@@ -48,15 +53,20 @@ const parsePactlBlocks = (
       : binary
         ? binary.charAt(0).toUpperCase() + binary.slice(1)
         : (rawAppName || descMatch?.[1]?.trim() || '');
-    if (!volumeMatch || !muteMatch || !displayName) return [];
+    // Streams without an app identity (e.g. a PipeWire loopback's playback
+    // stream) are kept but only reachable via the "stream:<node.name>" slot
+    // syntax: they get no matchKeys so generic keywords never pick them up.
+    const nodeName = nodeNameMatch?.[1] ?? '';
+    const fallbackName = deviceDescMatch?.[1] ?? mediaNameMatch?.[1] ?? nodeName;
+    if (!volumeMatch || !muteMatch || !(displayName || (nodeName && fallbackName))) return [];
 
-    const matchKeys = [
+    const matchKeys = displayName ? [
       displayName,
       rawAppName, // original application.name (e.g. "WEBRTC Voice Engine") for keyword matching
       nameMatch?.[1],
       binary,
       appIdMatch?.[1],
-    ].filter(Boolean).join(' ').toLowerCase();
+    ].filter(Boolean).join(' ').toLowerCase() : '';
 
     return [{
       index: indexMatch[1],
@@ -64,9 +74,11 @@ const parsePactlBlocks = (
       state: stateMatch?.[1].toLowerCase() ?? 'running',
       volume: Number(volumeMatch[1]),
       muted: muteMatch[1] === 'yes',
-      name: displayName,
+      name: displayName || fallbackName,
       type,
       entryName: nameMatch?.[1] || '',
+      nodeName,
+      streamName: fallbackName,
       matchKeys,
     }];
   });
@@ -96,7 +108,7 @@ export const fetchPactlData = async (): Promise<PactlData> => {
   };
 };
 
-const toChannel = ({ entryName: _, matchKeys: __, ...rest }: ParsedEntry): mediaChannelType => ({ ...rest, indices: [rest.index] });
+const toChannel = ({ entryName: _, nodeName: __, streamName: ___, matchKeys: ____, ...rest }: ParsedEntry): mediaChannelType => ({ ...rest, indices: [rest.index] });
 
 export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChannelsType => {
   const config = readConfig();
@@ -113,6 +125,16 @@ export const resolveMediaChannels = (data: PactlData, layer: Layer): mediaChanne
     if (sinkOnlyKeywords.length) {
       const sinkMatch = data.sinks.find(s => sinkOnlyKeywords.some(kw => s.matchKeys.includes(kw)));
       return sinkMatch ? toChannel(sinkMatch) : undefined as unknown as mediaChannelType;
+    }
+
+    // "stream:<node.name>" targets one sink-input by its exact PipeWire node
+    // name — used for the playback stream of Spotify's virtual sink: Spotify
+    // can't reset it and, unlike a sink, changing it doesn't trigger the
+    // desktop's volume OSD.
+    const streamKeywords = keywords.filter(kw => kw.startsWith('stream:')).map(kw => kw.slice('stream:'.length));
+    if (streamKeywords.length) {
+      const streamMatch = data.sinkInputs.find(s => streamKeywords.includes(s.nodeName));
+      return streamMatch ? { ...toChannel(streamMatch), name: streamMatch.streamName } : undefined as unknown as mediaChannelType;
     }
 
     const matches = (entries: ParsedEntry[]) =>

@@ -116,7 +116,8 @@ Configuration is stored in `config.json` at the project root. It is managed from
 - `null` — empty slot
 - `"spotify"` — matches any application whose name contains "spotify"
 - `["app1", "app2"]` — matches multiple apps; volume is averaged across all matches
-- `"sink:<name>"` — controls a PipeWire sink directly instead of an app stream (see Spotify below)
+- `"sink:<name>"` — controls a PipeWire sink directly instead of an app stream
+- `"stream:<node.name>"` — controls one PipeWire stream by its exact `node.name` (see Spotify below)
 
 ### Spotify volume
 
@@ -130,8 +131,12 @@ cp assets/pipewire/spotify-sink.conf ~/.config/pipewire/pipewire.conf.d/
 systemctl --user restart pipewire
 ```
 
-Then use `"sink:spotify_sink"` as the slot value. The controller moves
+Then use `"stream:spotify_sink_playback"` as the slot value: it controls the
+loopback's output stream, which Spotify can't touch. The controller moves
 Spotify's stream to `spotify_sink` automatically on every poll tick.
+
+`"sink:spotify_sink"` also works, but changing a sink's volume makes KDE Plasma
+show its system volume OSD on every knob turn, so prefer the stream.
 
 **Button action values:**
 - `null` — no action
